@@ -363,7 +363,7 @@ bot.on("message", async (msg) => {
   const code = msg.text.trim();
   const fileId = MOVIES[code];
 
-  if (!fileId) return bot.sendMessage(chatId, "❌ Bunday kod topilmadi..");
+  if (!fileId) return bot.sendMessage(chatId, "❌ Bunday kod topilmadi.");
 
   const caption = `🎬 Kino kodi: ${code}\n🤖 Bizning bot: @${BOT_USERNAME}\n`;
 
