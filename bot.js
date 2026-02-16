@@ -11,10 +11,33 @@ if (!token) {
   process.exit(1);
 }
 
+// =====================
+// ✅ DATA DIR (persist uchun)
+// 1) DATA_DIR env bo'lsa -> o'sha
+// 2) /data mavjud bo'lsa -> /data (Railway/Render volume/disk)
+// 3) Aks holda -> __dirname (local)
+// =====================
+function resolveDataDir() {
+  const envDir = process.env.DATA_DIR && process.env.DATA_DIR.trim();
+  if (envDir) return envDir;
+
+  try {
+    if (fs.existsSync("/data")) return "/data";
+  } catch (_) {}
+
+  return __dirname;
+}
+
+const DATA_DIR = resolveDataDir();
+try {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+} catch (e) {
+  console.log("⚠️ DATA_DIR yaratib bo'lmadi:", DATA_DIR, e.message);
+}
+
 // ===== FILE PATHS =====
-const BASE_DIR = __dirname;
-const MOVIES_FILE = path.join(BASE_DIR, "movies.json");
-const ACCESS_FILE = path.join(BASE_DIR, "access.json");
+const MOVIES_FILE = path.join(DATA_DIR, "movies.json");
+const ACCESS_FILE = path.join(DATA_DIR, "access.json");
 
 function ensureFile(filePath) {
   if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, "{}", "utf8");
@@ -26,17 +49,16 @@ ensureFile(ACCESS_FILE);
 const bot = new TelegramBot(token, {
   polling: {
     interval: 300,
-    params: {
-      allowed_updates: ["message", "callback_query", "chat_join_request"],
-    },
+    params: { allowed_updates: ["message", "callback_query", "chat_join_request"] },
   },
 });
 
 bot.on("polling_error", (err) => console.log("polling_error:", err.message));
 
+// ✅ Bot username (@ belgisisiz!)
 const BOT_USERNAME = "elitefilms2026_bot";
 
-// ===== KANALLAR =====
+// ✅ Kanallar
 const PRIVATE_CHANNELS = [
   { title: "ELITE KANAL", url: "https://t.me/+o1c3ShtbQ2U0Njli", chat_id: -1003566642594 },
   { title: "VIP KANAL", url: "https://t.me/+ZEvXaTJAjbQ5MWRi", chat_id: -1003894526572 },
@@ -45,6 +67,7 @@ const PRIVATE_CHANNELS = [
 ];
 
 console.log("✅ Bot ishga tushdi.");
+console.log("DATA_DIR:", DATA_DIR);
 
 // ===== JSON HELPERS =====
 function readJson(file) {
@@ -77,6 +100,7 @@ function ensureUser(access, userId) {
   if (!access[key].channels) access[key].channels = {};
   return access[key];
 }
+
 function grantAccess(userId) {
   const access = loadAccess();
   const u = ensureUser(access, userId);
@@ -120,7 +144,7 @@ async function isMember(channelId, userId) {
   }
 }
 
-// ✅ real member bo'lganlarini "member" qilib yozib qo'yadi
+// ✅ real memberlarni status: "member" qilib yozib qo'yadi
 async function syncMembers(userId) {
   const access = loadAccess();
   const u = ensureUser(access, userId);
@@ -132,9 +156,8 @@ async function syncMembers(userId) {
     if (results[i]) {
       u.channels[key] = { status: "member", at: Date.now() };
     } else {
-      // member bo'lmasa, memberni o'chirib yuboramiz
+      // member bo'lmasa, member statusni o'chiramiz, requested qolishi mumkin
       if (u.channels[key]?.status === "member") delete u.channels[key];
-      // requested qolishi mumkin (zayavka bo'lsa)
     }
   });
 
@@ -142,7 +165,7 @@ async function syncMembers(userId) {
   return results;
 }
 
-// ✅ zayavka kelsa: requested deb yozamiz (lekin UI'da ham ✅ bo'ladi)
+// ✅ zayavka kelsa: requested deb yozamiz (UI'da ham ✅ bo'ladi)
 function markRequested(userId, channelId) {
   const access = loadAccess();
   const u = ensureUser(access, userId);
@@ -150,7 +173,7 @@ function markRequested(userId, channelId) {
   saveAccess(access);
 }
 
-// ===== KEYBOARD (requested ham ✅ bo'ladi) =====
+// ===== KEYBOARD (requested ham ✅ bo'ladi; soatcha yo'q) =====
 function buildSubscribeKeyboard(userId) {
   const access = loadAccess();
   const u = access[String(userId)] || {};
@@ -167,34 +190,7 @@ function buildSubscribeKeyboard(userId) {
   return rows;
 }
 
-// ===== SUBSCRIBE SCREEN (faqat 2 qator legend) =====
-// async function sendSubscribeScreen(chatId, userId, messageId) {
-//   const text =
-//     "❌ Botdan foydalanishdan oldin quyidagi kanallarga a'zo bo‘ling.\n\n" +
-//     "✅ = a'zo\n" +
-//     "❌ = yo‘q";
-
-//   const opts = {
-//     reply_markup: { inline_keyboard: buildSubscribeKeyboard(userId) },
-//     disable_web_page_preview: true,
-//   };
-
-//   if (messageId) {
-//     return bot
-//       .editMessageText(text, { chat_id: chatId, message_id: messageId, ...opts })
-//       .catch(() =>
-//         bot.sendMessage(chatId, text, opts).then((m) => {
-//           setLastSubscribeMessage(userId, chatId, m.message_id);
-//           return m;
-//         })
-//       );
-//   }
-
-//   return bot.sendMessage(chatId, text, opts).then((m) => {
-//     setLastSubscribeMessage(userId, chatId, m.message_id);
-//     return m;
-//   });
-// }
+// ===== SUBSCRIBE SCREEN (legend yo'q) =====
 async function sendSubscribeScreen(chatId, userId, messageId) {
   const text = "❌ Botdan foydalanishdan oldin quyidagi kanallarga a'zo bo‘ling.";
 
@@ -311,6 +307,7 @@ bot.onText(/\/list/, (msg) => {
   bot.sendMessage(msg.chat.id, "🎬 Kinolar:\n" + keys.map((k) => `• ${k}`).join("\n"));
 });
 
+// Admin video qabul
 bot.on("video", (msg) => {
   if (msg.from.id !== ADMIN_ID) return;
 
