@@ -1,20 +1,34 @@
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
 const TelegramBot = require("node-telegram-bot-api");
 
 const token = process.env.BOT_TOKEN;
 const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
 
 if (!token) {
-  console.error("❌ BOT_TOKEN yo‘q! .env ni tekshiring.");
+  console.error("❌ BOT_TOKEN yo‘q! .env / Variables ni tekshiring.");
   process.exit(1);
 }
 
+/**
+ * ✅ Railway network fix:
+ * Railway ko'pincha PORT kutadi. Telegram bot port ochmaydi.
+ * Shuning uchun kichkina HTTP server ochib qo'yamiz.
+ */
+const PORT = process.env.PORT || 3000;
+http
+  .createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("OK");
+  })
+  .listen(PORT, () => console.log("✅ Health server running on PORT:", PORT));
+
 // =====================
-// ✅ DATA DIR (persist uchun)
+// ✅ DATA DIR (Railway Volume uchun)
 // 1) DATA_DIR env bo'lsa -> o'sha
-// 2) /data mavjud bo'lsa -> /data (Railway/Render volume/disk)
+// 2) /data mavjud bo'lsa -> /data (Railway volume mount)
 // 3) Aks holda -> __dirname (local)
 // =====================
 function resolveDataDir() {
@@ -27,7 +41,6 @@ function resolveDataDir() {
 
   return __dirname;
 }
-
 const DATA_DIR = resolveDataDir();
 try {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -35,7 +48,6 @@ try {
   console.log("⚠️ DATA_DIR yaratib bo'lmadi:", DATA_DIR, e.message);
 }
 
-// ===== FILE PATHS =====
 const MOVIES_FILE = path.join(DATA_DIR, "movies.json");
 const ACCESS_FILE = path.join(DATA_DIR, "access.json");
 
@@ -45,6 +57,17 @@ function ensureFile(filePath) {
 ensureFile(MOVIES_FILE);
 ensureFile(ACCESS_FILE);
 
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return {};
+  }
+}
+function writeJson(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+}
+
 // ===== BOT =====
 const bot = new TelegramBot(token, {
   polling: {
@@ -52,10 +75,9 @@ const bot = new TelegramBot(token, {
     params: { allowed_updates: ["message", "callback_query", "chat_join_request"] },
   },
 });
-
 bot.on("polling_error", (err) => console.log("polling_error:", err.message));
 
-// ✅ Bot username (@ belgisisiz!)
+// ✅ Bot username (@ belgisisiz)
 const BOT_USERNAME = "elitefilms2026_bot";
 
 // ✅ Kanallar
@@ -68,18 +90,6 @@ const PRIVATE_CHANNELS = [
 
 console.log("✅ Bot ishga tushdi.");
 console.log("DATA_DIR:", DATA_DIR);
-
-// ===== JSON HELPERS =====
-function readJson(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return {};
-  }
-}
-function writeJson(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
-}
 
 // ===== MOVIES =====
 let MOVIES = readJson(MOVIES_FILE);
@@ -144,7 +154,7 @@ async function isMember(channelId, userId) {
   }
 }
 
-// ✅ real memberlarni status: "member" qilib yozib qo'yadi
+// ✅ real memberlarni "member" qilib yozib qo'yadi
 async function syncMembers(userId) {
   const access = loadAccess();
   const u = ensureUser(access, userId);
@@ -173,7 +183,7 @@ function markRequested(userId, channelId) {
   saveAccess(access);
 }
 
-// ===== KEYBOARD (requested ham ✅ bo'ladi; soatcha yo'q) =====
+// ===== KEYBOARD (requested ham ✅ bo'ladi) =====
 function buildSubscribeKeyboard(userId) {
   const access = loadAccess();
   const u = access[String(userId)] || {};
@@ -243,10 +253,8 @@ bot.on("callback_query", async (q) => {
   if (!chatId || !userId) return;
 
   if (q.data === "check_sub") {
-    // 1) real memberlarni sync qilamiz
     await syncMembers(userId);
 
-    // 2) member YOKI requested bo'lsa complete
     const access = loadAccess();
     const u = access[String(userId)] || {};
     const chmap = u.channels || {};
@@ -307,7 +315,6 @@ bot.onText(/\/list/, (msg) => {
   bot.sendMessage(msg.chat.id, "🎬 Kinolar:\n" + keys.map((k) => `• ${k}`).join("\n"));
 });
 
-// Admin video qabul
 bot.on("video", (msg) => {
   if (msg.from.id !== ADMIN_ID) return;
 
@@ -339,9 +346,7 @@ bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
 
-  // startda real memberlarni sync qilib qo'yamiz
   await syncMembers(userId).catch(() => {});
-
   if (!hasAccess(userId)) return sendSubscribeScreen(chatId, userId);
 
   bot.sendMessage(chatId, "🎬 Kino kodini yuboring");
