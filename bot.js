@@ -4,20 +4,17 @@ const path = require("path");
 const http = require("http");
 const TelegramBot = require("node-telegram-bot-api");
 
+// ===== ENV =====
 const token = process.env.BOT_TOKEN;
 const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
 
 if (!token) {
-  console.error("❌ BOT_TOKEN yo‘q! Railway Variables (.env) ni tekshiring.");
+  console.error("❌ BOT_TOKEN yo‘q! Railway Variables ni tekshiring.");
   process.exit(1);
 }
 
-/**
- * ✅ Railway network fix:
- * Railway ko'pincha PORT kutadi. Telegram bot port ochmaydi.
- * Shuning uchun kichkina HTTP server ochib qo'yamiz.
- */
-const PORT = process.env.PORT || 3000;
+// ===== RAILWAY HEALTH SERVER (PORT) =====
+const PORT = Number(process.env.PORT || 3000);
 http
   .createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
@@ -77,12 +74,22 @@ const bot = new TelegramBot(token, {
   },
 });
 
+// ✅ Polling ishlashi uchun webhook bo‘lsa ham o‘chirib tashlaymiz
+(async () => {
+  try {
+    await bot.deleteWebHook({ drop_pending_updates: true });
+    console.log("✅ Webhook cleared (polling mode)");
+  } catch (e) {
+    console.log("deleteWebHook error:", e.message);
+  }
+})();
+
 bot.on("polling_error", (err) => console.log("polling_error:", err.message));
 
 // ✅ Bot username (@ belgisisiz)
 const BOT_USERNAME = "elitefilms2026_bot";
 
-// ✅ Kanallar (o'zingnikilar)
+// ✅ Kanallar
 const PRIVATE_CHANNELS = [
   { title: "ELITE KANAL", url: "https://t.me/+o1c3ShtbQ2U0Njli", chat_id: -1003566642594 },
   { title: "VIP KANAL", url: "https://t.me/+ZEvXaTJAjbQ5MWRi", chat_id: -1003894526572 },
@@ -168,7 +175,6 @@ async function syncMembers(userId) {
     if (results[i]) {
       u.channels[key] = { status: "member", at: Date.now() };
     } else {
-      // member bo'lmasa, member statusni o'chiramiz, requested qolishi mumkin
       if (u.channels[key]?.status === "member") delete u.channels[key];
     }
   });
@@ -185,7 +191,7 @@ function markRequested(userId, channelId) {
   saveAccess(access);
 }
 
-// ===== KEYBOARD (requested ham ✅ bo'ladi; legend yo'q) =====
+// ===== KEYBOARD =====
 function buildSubscribeKeyboard(userId) {
   const access = loadAccess();
   const u = access[String(userId)] || {};
@@ -202,7 +208,7 @@ function buildSubscribeKeyboard(userId) {
   return rows;
 }
 
-// ===== SUBSCRIBE SCREEN (legend yo'q) =====
+// ===== SUBSCRIBE SCREEN =====
 async function sendSubscribeScreen(chatId, userId, messageId) {
   const text = "❌ Botdan foydalanishdan oldin quyidagi kanallarga a'zo bo‘ling.";
 
