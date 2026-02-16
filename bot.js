@@ -8,7 +8,7 @@ const token = process.env.BOT_TOKEN;
 const ADMIN_ID = Number(process.env.ADMIN_ID || 0);
 
 if (!token) {
-  console.error("❌ BOT_TOKEN yo‘q! .env / Variables ni tekshiring.");
+  console.error("❌ BOT_TOKEN yo‘q! Railway Variables (.env) ni tekshiring.");
   process.exit(1);
 }
 
@@ -41,6 +41,7 @@ function resolveDataDir() {
 
   return __dirname;
 }
+
 const DATA_DIR = resolveDataDir();
 try {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -75,12 +76,13 @@ const bot = new TelegramBot(token, {
     params: { allowed_updates: ["message", "callback_query", "chat_join_request"] },
   },
 });
+
 bot.on("polling_error", (err) => console.log("polling_error:", err.message));
 
 // ✅ Bot username (@ belgisisiz)
 const BOT_USERNAME = "elitefilms2026_bot";
 
-// ✅ Kanallar
+// ✅ Kanallar (o'zingnikilar)
 const PRIVATE_CHANNELS = [
   { title: "ELITE KANAL", url: "https://t.me/+o1c3ShtbQ2U0Njli", chat_id: -1003566642594 },
   { title: "VIP KANAL", url: "https://t.me/+ZEvXaTJAjbQ5MWRi", chat_id: -1003894526572 },
@@ -183,7 +185,7 @@ function markRequested(userId, channelId) {
   saveAccess(access);
 }
 
-// ===== KEYBOARD (requested ham ✅ bo'ladi) =====
+// ===== KEYBOARD (requested ham ✅ bo'ladi; legend yo'q) =====
 function buildSubscribeKeyboard(userId) {
   const access = loadAccess();
   const u = access[String(userId)] || {};
